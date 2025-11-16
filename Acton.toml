@@ -1,0 +1,15 @@
+[package]
+name = "Jetton Contract"
+description = "Am implementation of Jetton contract in Tolk"
+version = "0.1.0"
+license = "MIT"
+
+[contracts.jetton_minter]
+name = "Minter"
+src = "contracts/jetton-minter-contract.tolk"
+depends = []
+
+[contracts.jetton_wallet]
+name = "Wallet"
+src = "contracts/jetton-wallet-contract.tolk"
+depends = []

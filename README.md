@@ -56,9 +56,7 @@ get fun test_addition() {
 Давайте поговорим про то зачем мы тут сегодня собрались, про реальные тесты!
 
 ```tolk
-fun setup_test(): (Network, JettonMinter, Treasury, Treasury) {
-    val net = accuireNet("net");
-
+fun setup_test(): (JettonMinter, Treasury, Treasury) {
     val deployer = net.treasury("deployer");
     val not_deployer = net.treasury("not_deployer");
 
@@ -66,13 +64,13 @@ fun setup_test(): (Network, JettonMinter, Treasury, Treasury) {
         totalSupply: 1000000,
         adminAddress: deployer.address,
         content: createEmptyCell(),
-        jettonWalletCode: build("Wallet", "./.jetton/contracts/jetton-wallet-contract.tolk"),
+        jettonWalletCode: build("Wallet"),
     });
 
-    val transactions = minter.sendDeploy(net, { value: ton("10") });
-    expect(transactions).toHaveSuccesfulDeploy({ to: minter.address });
+    val transactions = minter.sendDeploy({ value: ton("10") });
+    expect(transactions).toHaveSuccessfulDeploy({ to: minter.address });
 
-    return (net, minter, deployer, not_deployer);
+    return (minter, deployer, not_deployer);
 }
 ```
 
@@ -83,10 +81,10 @@ fun setup_test(): (Network, JettonMinter, Treasury, Treasury) {
 ```tolk
 fun JettonMinter.fromStorage(storage: MinterStorage) {
     val init = ContractState {
-        code: build("Minter", "./.jetton/contracts/jetton-minter-contract.tolk"),
+        code: build("Minter"),
         data: storage.toCell(),
     };
-    val addr = address.fromValidBuilder(AutoDeployAddress { stateInit: init }.buildAddress());
+    val addr = AutoDeployAddress { stateInit: init }.calculateAddress();`
     return JettonMinter {
         address: addr, init
     }
@@ -99,31 +97,30 @@ fun JettonMinter.fromStorage(storage: MinterStorage) {
 
 ```tolk
 get fun `test-can-mint`() {
-    val (net, minter, deployer, _) = setup_test();
-    val initial_total_supply = minter.getTotalSupply(net);
+    val (minter, deployer, _) = setup_test();
+    val initial_total_supply = minter.getTotalSupply();
 
-    val wallet = userWallet(minter, net, deployer.address);
+    val wallet = userWallet(minter, deployer.address);
 
     val initial_jetton_balance = ton("1000.23");
     val mint_result = minter.sendMint(
-        net,
         deployer.address,
         deployer.address,
         initial_jetton_balance,
         ton("0.05"),
         ton("1")
     );
-    expect(mint_result).toHaveSuccesfulTx({ from: minter.address, to: wallet.address });
-    expect(mint_result).toHaveSuccesfulTx({ from: wallet.address, to: minter.address }, 65535);
-    expect(wallet.getJettonBalance(net)).toEqual(initial_jetton_balance);
-    expect(minter.getTotalSupply(net)).toEqual(initial_total_supply + initial_jetton_balance)
+    expect(mint_result).toHaveSuccessfulTx({ from: minter.address, to: wallet.address });
+    expect(mint_result).toHaveSuccessfulTx({ from: wallet.address, to: minter.address, exit_code: 65535 });
+    expect(wallet.getJettonBalance()).toEqual(initial_jetton_balance);
+    expect(minter.getTotalSupply()).toEqual(initial_total_supply + initial_jetton_balance)
 }
 ```
 
 А вот как выглядит отправка этого самого минта:
 
 ```tolk
-fun JettonMinter.sendMint(self, net: Network, from: address, recipient: address, jetton_amount: int, forward_ton_amount: int, total_ton_amount: int) {
+fun JettonMinter.sendMint(self, from: address, recipient: address, jetton_amount: int, forward_ton_amount: int, total_ton_amount: int) {
     val msg = createMessage({
         bounce: false,
         value: total_ton_amount + ton("0.015"),
@@ -135,7 +132,7 @@ fun JettonMinter.sendMint(self, net: Network, from: address, recipient: address,
             internalTransferMsg: InternalTransferStep {
                 queryId: 0,
                 jettonAmount: jetton_amount,
-                transferInitiator: createAddressNone(),
+                transferInitiator: null,
                 sendExcessesTo: self.address,
                 forwardTonAmount: forward_ton_amount,
                 forwardPayload: createEmptySlice(),
