@@ -1,2 +1,5 @@
 # Acton project directories
 .acton/
+
+# Mnemonic files
+*.mnemonic
