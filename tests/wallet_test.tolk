@@ -34,11 +34,12 @@ fun setup_test(): (JettonMinter, Treasury, Treasury) {
     return (minter, deployer, not_deployer);
 }
 
-get fun `test can mint`() {
-    val (minter, deployer, _) = setup_test();
+get fun `test minter admin should be able to mint jettons`() {
+    val (minter, deployer, not_deployer) = setup_test();
     val initial_total_supply = minter.getTotalSupply();
 
     val wallet = userWallet(minter, deployer.address);
+    val not_deployer_wallet = userWallet(minter, not_deployer.address);
 
     val initial_jetton_balance = ton("1000.23");
     val mint_result = minter.sendMint(
@@ -55,7 +56,49 @@ get fun `test can mint`() {
 
     // check state
     expect(wallet.getJettonBalance()).toEqual(initial_jetton_balance);
-    expect(minter.getTotalSupply()).toEqual(initial_total_supply + initial_jetton_balance)
+    expect(minter.getTotalSupply()).toEqual(initial_total_supply + initial_jetton_balance);
+
+    val additional_jetton_balance = ton("2.31");
+    val mint_result_2 = minter.sendMint(
+        deployer.address,
+        deployer.address,
+        additional_jetton_balance,
+        ton("0.05"),
+        ton("1")
+    );
+
+    expect(mint_result_2).toHaveSuccessfulTx({ from: minter.address, to:  wallet.address });
+
+    expect(mint_result_2).toHaveSuccessfulTx({
+        from:  wallet.address,
+        to: minter.address,
+        exit_code: 65535
+    });
+
+    expect( wallet.getJettonBalance()).toEqual(initial_jetton_balance + additional_jetton_balance);
+    expect(minter.getTotalSupply()).toEqual(initial_total_supply + initial_jetton_balance + additional_jetton_balance);
+
+    val other_jetton_balance = ton("3.12");
+    val mint_result_3 = minter.sendMint(
+        deployer.address,
+        not_deployer.address,
+        other_jetton_balance,
+        ton("0.05"),
+        ton("1")
+    );
+
+    expect(mint_result_3).toHaveSuccessfulTx({ from: minter.address, to: not_deployer_wallet.address });
+
+    expect(mint_result_3).toHaveSuccessfulTx({
+        from: not_deployer_wallet.address,
+        to: minter.address,
+        exit_code: 65535
+    });
+
+    expect(not_deployer_wallet.getJettonBalance()).toEqual(other_jetton_balance);
+    expect(minter.getTotalSupply()).toEqual(
+        initial_total_supply + initial_jetton_balance + additional_jetton_balance + other_jetton_balance
+    );
 }
 
 get fun `test not a minter admin should not be able to mint jettons`() {
@@ -282,6 +325,47 @@ get fun `test impossible to send too much jettons`() {
 
     expect(deployer_jetton_wallet.getJettonBalance()).toEqual(initial_jetton_balance);
     expect(not_deployer_jetton_wallet.getJettonBalance()).toEqual(initial_jetton_balance_2);
+}
+
+get fun `test malformed forward payload`() {
+    val (minter, deployer, not_deployer) = setup_test();
+
+    // Mint some jettons to deployer first
+    val mint_result = minter.sendMint(
+        deployer.address,
+        deployer.address,
+        ton("1"),
+        ton("0.05"),
+        ton("1")
+    );
+    expect(mint_result).toHaveSuccessfulTx({ from: minter.address, to: userWallet(minter, deployer.address).address });
+
+    val deployer_jetton_wallet = userWallet(minter, deployer.address);
+
+    val sent_amount = ton("0.5");
+    val forward_amount = random.range(ton("0.04")) + ton("0.01"); // 0.01-0.05
+
+    val transfer_msg = createMessage({
+        bounce: false,
+        value: ton("0.2"),
+        dest: deployer_jetton_wallet.address,
+        body: AskToTransfer {
+            queryId: 0,
+            jettonAmount: sent_amount,
+            transferRecipient: not_deployer.address,
+            sendExcessesTo: deployer.address,
+            customPayload: null,
+            forwardTonAmount: forward_amount,
+            forwardPayload: createEmptySlice(),
+        }.toCell(),
+    });
+
+    val res = net.send(deployer.address, transfer_msg, SEND_MODE_REGULAR);
+    expect(res).toHaveFailedTx({
+        from: deployer.address,
+        to: deployer_jetton_wallet.address,
+        exit_code: ERR_INVALID_PAYLOAD,
+    });
 }
 
 get fun `test correctly sends forward payload`() {
@@ -870,5 +954,45 @@ get fun `test can not send to masterchain`() {
         from: deployer.address,
         to: deployer_jetton_wallet.address,
         exit_code: ERR_WRONG_WORKCHAIN
+    });
+}
+
+get fun `test transfer to masterchain`() {
+    val (minter, deployer, _) = setup_test();
+
+    // Mint some jettons to deployer first
+    val mint_result = minter.sendMint(
+        deployer.address,
+        deployer.address,
+        ton("1"),
+        ton("0.05"),
+        ton("1")
+    );
+    expect(mint_result).toHaveSuccessfulTx({ from: minter.address, to: userWallet(minter, deployer.address).address });
+
+    val deployer_jetton_wallet = userWallet(minter, deployer.address);
+
+    val invalid_address = net.randomAddress("invalid", -1);
+
+    val transfer_msg = createMessage({
+        bounce: false,
+        value: ton("0.2"),
+        dest: deployer_jetton_wallet.address,
+        body: AskToTransfer {
+            queryId: 0,
+            jettonAmount: ton("0.5"),
+            transferRecipient: invalid_address,
+            sendExcessesTo: deployer.address,
+            customPayload: null,
+            forwardTonAmount: 0,
+            forwardPayload: beginCell().storeUint(0, 1).endCell().beginParse(),
+        }.toCell(),
+    });
+
+    val res = net.send(deployer.address, transfer_msg, SEND_MODE_REGULAR);
+    expect(res).toHaveFailedTx({
+        from: deployer.address,
+        to: deployer_jetton_wallet.address,
+        exit_code: ERR_WRONG_WORKCHAIN,
     });
 }
