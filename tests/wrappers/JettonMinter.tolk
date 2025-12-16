@@ -56,10 +56,10 @@ struct JettonMinter {
     init: ContractState
 }
 
-fun JettonMinter.sendDiscovery(self, from: address, ownerAddress: address, includeOwnerAddress: bool) {
+fun JettonMinter.sendDiscovery(self, from: address, ownerAddress: address, includeOwnerAddress: bool, value: coins = ton("0.1")) {
     val msg = createMessage({
         bounce: false,
-        value: ton("0.1"),
+        value,
         dest: self.address,
         body: RequestWalletAddress {
             queryId: 0,

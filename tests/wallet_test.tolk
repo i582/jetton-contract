@@ -694,6 +694,17 @@ get fun `test report correct discovery address`() {
     });
 }
 
+get fun `test fail to report discovery address with not enough tons`() {
+    val (minter, deployer, _) = setup_test();
+
+    val discovery_res = minter.sendDiscovery(deployer.address, deployer.address, true, ton("0.01"));
+    expect(discovery_res).toHaveFailedTx({
+        from: deployer.address,
+        to: minter.address,
+        exit_code: ERR_NOT_ENOUGH_AMOUNT_TO_RESPOND,
+    });
+}
+
 get fun `test wallet should restore balance on internal transfer bounce`() {
     val (minter, deployer, not_deployer) = setup_test();
 
