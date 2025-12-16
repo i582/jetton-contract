@@ -48,7 +48,7 @@ fun JettonMinter.fromStorage(storage: MinterStorage) {
     }
 }
 
-fun JettonMinter.sendDeploy(self, params: SendParams) {
+fun JettonMinter.sendDeploy(self, from: address, params: SendParams) {
     val msg = createMessage({
         bounce: false,
         value: params.value,
@@ -57,7 +57,7 @@ fun JettonMinter.sendDeploy(self, params: SendParams) {
             stateInit: self.init,
         },
     });
-    return net.send(net.treasury("treasury").address, msg, SEND_MODE_PAY_FEES_SEPARATELY)
+    return net.send(from, msg, SEND_MODE_PAY_FEES_SEPARATELY)
 }
 
 fun JettonMinter.sendMint(self, from: address, recipient: address, jetton_amount: int, forward_ton_amount: int, total_ton_amount: int) {
