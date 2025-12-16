@@ -11,6 +11,7 @@ import "../contracts/messages"
 import "../contracts/storage"
 
 import "wrappers/JettonMinter"
+import "wrappers/JettonWallet"
 
 fun userWallet(minter: JettonMinter, userAddress: address): JettonWallet {
     val address = minter.getWalletAddress(userAddress);
